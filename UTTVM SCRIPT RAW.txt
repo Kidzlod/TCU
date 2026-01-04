@@ -1,0 +1,560 @@
+local Players = game:GetService("Players")
+local UserInputService = game:GetService("UserInputService")
+local TweenService = game:GetService("TweenService")
+local RunService = game:GetService("RunService")
+local LocalPlayer = Players.LocalPlayer
+
+pcall(function()
+    local old = LocalPlayer.PlayerGui:FindFirstChild("UTTVMUI")
+    if old then old:Destroy() end
+end)
+
+local state = {
+    coreEnabled = false,
+    parryEnabled = false,
+    clawEnabled = false,
+    clickEnabled = false,
+    spamDelay = 0.1,
+    totalSpamCount = 0,
+    sessionSpamCount = 0,
+    menuVisible = true
+}
+
+local screenGui = Instance.new("ScreenGui")
+screenGui.Name = "UTTVMUI"
+screenGui.ResetOnSpawn = false
+screenGui.DisplayOrder = 999999
+screenGui.IgnoreGuiInset = true
+screenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+screenGui.Parent = LocalPlayer:WaitForChild("PlayerGui")
+
+RunService.Heartbeat:Connect(function()
+    if screenGui.Parent ~= LocalPlayer.PlayerGui then
+        screenGui.Parent = LocalPlayer.PlayerGui
+    end
+    screenGui.Enabled = true
+end)
+
+local function newBtn(txt, pos, size)
+    size = size or UDim2.new(0,200,0,40)
+    local b = Instance.new("TextButton")
+    b.Size = size
+    b.Position = pos
+    b.Text = txt
+    b.BackgroundColor3 = Color3.fromRGB(35,35,35)
+    b.TextColor3 = Color3.new(1,1,1)
+    b.Font = Enum.Font.GothamBold
+    b.TextSize = 14
+    b.BorderSizePixel = 0
+    
+    Instance.new("UICorner",b).CornerRadius = UDim.new(0,8)
+    
+    local stroke = Instance.new("UIStroke", b)
+    stroke.Color = Color3.fromRGB(60,60,60)
+    stroke.Thickness = 1.5
+    
+    b.MouseEnter:Connect(function()
+        TweenService:Create(b, TweenInfo.new(0.2), {BackgroundColor3 = Color3.fromRGB(45,45,45)}):Play()
+    end)
+    b.MouseLeave:Connect(function()
+        if b.BackgroundColor3 ~= Color3.fromRGB(0,170,0) then
+            TweenService:Create(b, TweenInfo.new(0.2), {BackgroundColor3 = Color3.fromRGB(35,35,35)}):Play()
+        end
+    end)
+    
+    return b
+end
+
+local function newLabel(txt, pos, size)
+    size = size or UDim2.new(0,200,0,28)
+    local l = Instance.new("TextLabel")
+    l.Size = size
+    l.Position = pos
+    l.Text = txt
+    l.BackgroundColor3 = Color3.fromRGB(25,25,25)
+    l.TextColor3 = Color3.fromRGB(220,220,220)
+    l.Font = Enum.Font.Gotham
+    l.TextSize = 13
+    l.BorderSizePixel = 0
+    
+    Instance.new("UICorner",l).CornerRadius = UDim.new(0,6)
+    
+    local stroke = Instance.new("UIStroke", l)
+    stroke.Color = Color3.fromRGB(50,50,50)
+    stroke.Thickness = 1
+    
+    return l
+end
+
+local function newSlider(pos, minVal, maxVal, defaultVal, labelText, callback)
+    local container = Instance.new("Frame")
+    container.Size = UDim2.new(0,200,0,50)
+    container.Position = pos
+    container.BackgroundTransparency = 1
+    
+    local label = Instance.new("TextLabel")
+    label.Size = UDim2.new(1,0,0,18)
+    label.Text = labelText .. ": " .. defaultVal .. "s"
+    label.BackgroundTransparency = 1
+    label.TextColor3 = Color3.fromRGB(220,220,220)
+    label.Font = Enum.Font.GothamBold
+    label.TextSize = 12
+    label.Parent = container
+    
+    local slider = Instance.new("TextButton")
+    slider.Size = UDim2.new(1,0,0,22)
+    slider.Position = UDim2.new(0,0,0,24)
+    slider.Text = ""
+    slider.BackgroundColor3 = Color3.fromRGB(40,40,40)
+    slider.BorderSizePixel = 0
+    slider.Parent = container
+    
+    Instance.new("UICorner",slider).CornerRadius = UDim.new(0,6)
+    
+    local fill = Instance.new("Frame")
+    fill.Size = UDim2.new((defaultVal - minVal) / (maxVal - minVal), 0, 1, 0)
+    fill.BackgroundColor3 = Color3.fromRGB(255,50,100)
+    fill.BorderSizePixel = 0
+    fill.Parent = slider
+    
+    Instance.new("UICorner",fill).CornerRadius = UDim.new(0,6)
+    
+    local dragging = false
+    
+    local function updateSlider(input)
+        local relativeX = math.clamp((input.Position.X - slider.AbsolutePosition.X) / slider.AbsoluteSize.X, 0, 1)
+        local value = minVal + (maxVal - minVal) * relativeX
+        value = math.floor(value * 100) / 100
+        
+        TweenService:Create(fill, TweenInfo.new(0.1), {Size = UDim2.new(relativeX, 0, 1, 0)}):Play()
+        label.Text = labelText .. ": " .. value .. "s"
+        callback(value)
+    end
+    
+    slider.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            dragging = true
+            updateSlider(input)
+        end
+    end)
+    
+    slider.InputEnded:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            dragging = false
+        end
+    end)
+    
+    slider.InputChanged:Connect(function(input)
+        if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+            updateSlider(input)
+        end
+    end)
+    
+    return container
+end
+
+local frame = Instance.new("Frame")
+frame.Size = UDim2.new(0,240,0,460)
+frame.Position = UDim2.new(0.5,-120,0.5,-230)
+frame.BackgroundColor3 = Color3.fromRGB(20,20,20)
+frame.BorderSizePixel = 0
+frame.ClipsDescendants = true
+frame.Active = true
+frame.Draggable = false
+frame.Parent = screenGui
+
+Instance.new("UICorner",frame).CornerRadius = UDim.new(0,15)
+
+local frameStroke = Instance.new("UIStroke", frame)
+frameStroke.Color = Color3.fromRGB(255,50,100)
+frameStroke.Thickness = 3
+frameStroke.Transparency = 0
+
+do
+    local dragging = false
+    local dragStart = nil
+    local startPos = nil
+    
+    local dragButton = Instance.new("TextButton")
+    dragButton.Size = UDim2.new(1,0,0,40)
+    dragButton.Position = UDim2.new(0,0,0,0)
+    dragButton.Text = ""
+    dragButton.BackgroundTransparency = 1
+    dragButton.ZIndex = 6
+    dragButton.Parent = frame
+    
+    dragButton.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            dragging = true
+            dragStart = input.Position
+            startPos = frame.Position
+        end
+    end)
+    
+    dragButton.InputEnded:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            dragging = false
+        end
+    end)
+    
+    UserInputService.InputChanged:Connect(function(input)
+        if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+            local delta = input.Position - dragStart
+            frame.Position = UDim2.new(
+                startPos.X.Scale,
+                startPos.X.Offset + delta.X,
+                startPos.Y.Scale,
+                startPos.Y.Offset + delta.Y
+            )
+        end
+    end)
+end
+
+local title = Instance.new("TextLabel")
+title.Size = UDim2.new(1,0,0,40)
+title.Text = "UTTVM AUTO SPAM"
+title.BackgroundColor3 = Color3.fromRGB(255,50,100)
+title.TextColor3 = Color3.new(1,1,1)
+title.Font = Enum.Font.GothamBold
+title.TextSize = 16
+title.BorderSizePixel = 0
+title.ZIndex = 5
+title.Parent = frame
+
+Instance.new("UICorner",title).CornerRadius = UDim.new(0,15)
+
+local titleGradient = Instance.new("UIGradient", title)
+titleGradient.Color = ColorSequence.new{
+    ColorSequenceKeypoint.new(0, Color3.fromRGB(255,50,100)),
+    ColorSequenceKeypoint.new(1, Color3.fromRGB(200,30,80))
+}
+titleGradient.Rotation = 45
+
+task.spawn(function()
+    while title and title.Parent do
+        for hue = 0, 1, 0.01 do
+            if not title or not title.Parent then break end
+            
+            local color1 = Color3.fromHSV(hue, 1, 1)
+            local color2 = Color3.fromHSV((hue + 0.3) % 1, 1, 1)
+            
+            titleGradient.Color = ColorSequence.new{
+                ColorSequenceKeypoint.new(0, color1),
+                ColorSequenceKeypoint.new(1, color2)
+            }
+            
+            task.wait(0.03)
+        end
+    end
+end)
+
+local coreBtn = newBtn("Core: OFF", UDim2.new(0,20,0,50))
+coreBtn.Parent = frame
+
+local parryBtn = newBtn("Parry: OFF", UDim2.new(0,20,0,100))
+parryBtn.Parent = frame
+
+local clawBtn = newBtn("Claw: OFF", UDim2.new(0,20,0,150))
+clawBtn.Parent = frame
+
+local clickBtn = newBtn("Click: OFF", UDim2.new(0,20,0,200))
+clickBtn.Parent = frame
+
+local delaySlider = newSlider(UDim2.new(0,20,0,250), 0.01, 1.0, 0.1, "Spam Delay", function(value)
+    state.spamDelay = value
+end)
+delaySlider.Parent = frame
+
+local totalLabel = newLabel("Total: 0", UDim2.new(0,20,0,310))
+totalLabel.Parent = frame
+
+local sessionLabel = newLabel("Session: 0", UDim2.new(0,20,0,348))
+sessionLabel.Parent = frame
+
+local rateLabel = newLabel("Rate: 0/s", UDim2.new(0,20,0,386))
+rateLabel.Parent = frame
+
+local creditLabel = Instance.new("TextLabel")
+creditLabel.Size = UDim2.new(0,200,0,25)
+creditLabel.Position = UDim2.new(0,20,0,425)
+creditLabel.Text = "Made By Kidz"
+creditLabel.BackgroundTransparency = 1
+creditLabel.TextColor3 = Color3.new(1,1,1)
+creditLabel.Font = Enum.Font.GothamBold
+creditLabel.TextSize = 14
+creditLabel.Parent = frame
+
+local creditGradient = Instance.new("UIGradient", creditLabel)
+creditGradient.Color = ColorSequence.new{
+    ColorSequenceKeypoint.new(0, Color3.fromRGB(255,0,0)),
+    ColorSequenceKeypoint.new(0.17, Color3.fromRGB(255,127,0)),
+    ColorSequenceKeypoint.new(0.33, Color3.fromRGB(255,255,0)),
+    ColorSequenceKeypoint.new(0.5, Color3.fromRGB(0,255,0)),
+    ColorSequenceKeypoint.new(0.67, Color3.fromRGB(0,0,255)),
+    ColorSequenceKeypoint.new(0.83, Color3.fromRGB(75,0,130)),
+    ColorSequenceKeypoint.new(1, Color3.fromRGB(148,0,211))
+}
+
+task.spawn(function()
+    while creditGradient and creditLabel.Parent do
+        for i = 0, 360, 2 do
+            if creditGradient then
+                creditGradient.Rotation = i
+            end
+            task.wait(0.03)
+        end
+    end
+end)
+
+local minimizeBtn = Instance.new("TextButton")
+minimizeBtn.Size = UDim2.new(0,30,0,30)
+minimizeBtn.Position = UDim2.new(1,-35,0,5)
+minimizeBtn.Text = "−"
+minimizeBtn.BackgroundColor3 = Color3.fromRGB(255,100,0)
+minimizeBtn.TextColor3 = Color3.new(1,1,1)
+minimizeBtn.Font = Enum.Font.GothamBold
+minimizeBtn.TextSize = 20
+minimizeBtn.BorderSizePixel = 0
+minimizeBtn.ZIndex = 10
+minimizeBtn.Parent = frame
+Instance.new("UICorner",minimizeBtn).CornerRadius = UDim.new(0,8)
+
+local coreLoop = nil
+local parryLoop = nil
+local clawLoop = nil
+local clickLoop = nil
+local lastUpdateTime = tick()
+
+local function updateCounters()
+    totalLabel.Text = "Total: " .. state.totalSpamCount
+    sessionLabel.Text = "Session: " .. state.sessionSpamCount
+    
+    local currentTime = tick()
+    local elapsed = currentTime - lastUpdateTime
+    if elapsed > 0 then
+        local rate = math.floor(state.sessionSpamCount / elapsed)
+        rateLabel.Text = "Rate: " .. rate .. "/s"
+    end
+end
+
+local function fireCore()
+    pcall(function()
+        local char = LocalPlayer.Character
+        if char then
+            local hrp = char:FindFirstChild("HumanoidRootPart")
+            if hrp then
+                local args = {
+                    hrp.CFrame,
+                    25,
+                    true
+                }
+                game:GetService("ReplicatedStorage")
+                    :WaitForChild("Remotes")
+                    :WaitForChild("UTTV")
+                    :WaitForChild("Core")
+                    :FireServer(unpack(args))
+                state.totalSpamCount += 1
+                state.sessionSpamCount += 1
+                updateCounters()
+            end
+        end
+    end)
+end
+
+local function fireParry()
+    pcall(function()
+        game:GetService("ReplicatedStorage")
+            :WaitForChild("Remotes")
+            :WaitForChild("UTTV")
+            :WaitForChild("parry")
+            :FireServer()
+        state.totalSpamCount += 1
+        state.sessionSpamCount += 1
+        updateCounters()
+    end)
+end
+
+local function fireClaw()
+    pcall(function()
+        game:GetService("ReplicatedStorage")
+            :WaitForChild("Remotes")
+            :WaitForChild("UTTV")
+            :WaitForChild("Claw")
+            :FireServer()
+        state.totalSpamCount += 1
+        state.sessionSpamCount += 1
+        updateCounters()
+    end)
+end
+
+local function fireClick()
+    pcall(function()
+        game:GetService("ReplicatedStorage")
+            :WaitForChild("Remotes")
+            :WaitForChild("UTTV")
+            :WaitForChild("Click")
+            :FireServer(3)
+        state.totalSpamCount += 1
+        state.sessionSpamCount += 1
+        updateCounters()
+    end)
+end
+
+local function startCore()
+    if coreLoop then return end
+    coreLoop = true
+    task.spawn(function()
+        while state.coreEnabled do
+            fireCore()
+            task.wait(state.spamDelay)
+        end
+        coreLoop = false
+    end)
+end
+
+local function startParry()
+    if parryLoop then return end
+    parryLoop = true
+    task.spawn(function()
+        while state.parryEnabled do
+            fireParry()
+            task.wait(state.spamDelay)
+        end
+        parryLoop = false
+    end)
+end
+
+local function startClaw()
+    if clawLoop then return end
+    clawLoop = true
+    task.spawn(function()
+        while state.clawEnabled do
+            fireClaw()
+            task.wait(state.spamDelay)
+        end
+        clawLoop = false
+    end)
+end
+
+local function startClick()
+    if clickLoop then return end
+    clickLoop = true
+    task.spawn(function()
+        while state.clickEnabled do
+            fireClick()
+            task.wait(state.spamDelay)
+        end
+        clickLoop = false
+    end)
+end
+
+coreBtn.MouseButton1Click:Connect(function()
+    state.coreEnabled = not state.coreEnabled
+    coreBtn.Text = state.coreEnabled and "Core: ON" or "Core: OFF"
+    
+    TweenService:Create(coreBtn, TweenInfo.new(0.3), {
+        BackgroundColor3 = state.coreEnabled and Color3.fromRGB(0,170,0) or Color3.fromRGB(35,35,35)
+    }):Play()
+
+    if state.coreEnabled then
+        state.sessionSpamCount = 0
+        lastUpdateTime = tick()
+        startCore()
+    else
+        coreLoop = false
+    end
+end)
+
+parryBtn.MouseButton1Click:Connect(function()
+    state.parryEnabled = not state.parryEnabled
+    parryBtn.Text = state.parryEnabled and "Parry: ON" or "Parry: OFF"
+    
+    TweenService:Create(parryBtn, TweenInfo.new(0.3), {
+        BackgroundColor3 = state.parryEnabled and Color3.fromRGB(0,170,0) or Color3.fromRGB(35,35,35)
+    }):Play()
+
+    if state.parryEnabled then
+        state.sessionSpamCount = 0
+        lastUpdateTime = tick()
+        startParry()
+    else
+        parryLoop = false
+    end
+end)
+
+clawBtn.MouseButton1Click:Connect(function()
+    state.clawEnabled = not state.clawEnabled
+    clawBtn.Text = state.clawEnabled and "Claw: ON" or "Claw: OFF"
+    
+    TweenService:Create(clawBtn, TweenInfo.new(0.3), {
+        BackgroundColor3 = state.clawEnabled and Color3.fromRGB(0,170,0) or Color3.fromRGB(35,35,35)
+    }):Play()
+
+    if state.clawEnabled then
+        state.sessionSpamCount = 0
+        lastUpdateTime = tick()
+        startClaw()
+    else
+        clawLoop = false
+    end
+end)
+
+clickBtn.MouseButton1Click:Connect(function()
+    state.clickEnabled = not state.clickEnabled
+    clickBtn.Text = state.clickEnabled and "Click: ON" or "Click: OFF"
+    
+    TweenService:Create(clickBtn, TweenInfo.new(0.3), {
+        BackgroundColor3 = state.clickEnabled and Color3.fromRGB(0,170,0) or Color3.fromRGB(35,35,35)
+    }):Play()
+
+    if state.clickEnabled then
+        state.sessionSpamCount = 0
+        lastUpdateTime = tick()
+        startClick()
+    else
+        clickLoop = false
+    end
+end)
+
+minimizeBtn.MouseButton1Click:Connect(function()
+    state.menuVisible = not state.menuVisible
+    
+    coreBtn.Visible = state.menuVisible
+    parryBtn.Visible = state.menuVisible
+    clawBtn.Visible = state.menuVisible
+    clickBtn.Visible = state.menuVisible
+    delaySlider.Visible = state.menuVisible
+    totalLabel.Visible = state.menuVisible
+    sessionLabel.Visible = state.menuVisible
+    rateLabel.Visible = state.menuVisible
+    creditLabel.Visible = state.menuVisible
+    
+    if state.menuVisible then
+        frame.Size = UDim2.new(0,240,0,460)
+    else
+        frame.Size = UDim2.new(0,240,0,40)
+    end
+    
+    minimizeBtn.Text = state.menuVisible and "−" or "+"
+end)
+
+UserInputService.InputBegan:Connect(function(i,g)
+    if g then return end
+    if i.KeyCode == Enum.KeyCode.H then
+        frame.Visible = not frame.Visible
+    end
+end)
+
+print("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+print("-UTTVM Auto Spam loaded!")
+print("-Made by Kidz")
+print("-Press H to toggle visibility")
+print("-Features:")
+print("   - Core Spam (auto CFrame)")
+print("   - Parry Spam")
+print("   - Claw Spam")
+print("   - Click Spam (arg: 3)")
+print("   - Adjustable Delay (0.01s - 1.0s)")
+print("   - Total & Session Counters")
+print("   - Rate Monitor (spams/second)")
+print("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
